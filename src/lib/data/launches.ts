@@ -34,32 +34,49 @@ export async function getLaunches(): Promise<Launch[]> {
     
     const approvedLaunches: Launch[] = [];
     
+    // Get current week's start and end dates
+    const currentDate = new Date();
+    const startOfWeek = new Date(currentDate);
+    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+
     querySnapshot.docs.forEach(docSnapshot => {
       const data = docSnapshot.data();
+      const launchDate = data.scheduledLaunchDate.toDate();
       
-      approvedLaunches.push({
-        id: docSnapshot.id,
-        name: data.name,
-        logo: data.logoUrl,
-        description: data.description,
-        launchDate: data.scheduledLaunchDate.toDate().toISOString(),
-        website: data.url,
-        category: data.category || 'New Launch',
-        listingType: data.listingType || 'regular',
-        doFollowBacklink: true,
-        upvotes: data.upvotes || 0,
-        upvotedBy: data.upvotedBy || []
-      });
+      // Only include launches that are:
+      // 1. Premium or Boosted listings (always show these)
+      // 2. Regular listings from the current week
+      if (data.listingType === 'premium' || 
+          data.listingType === 'boosted' ||
+          (launchDate >= startOfWeek && launchDate <= endOfWeek)) {
+        approvedLaunches.push({
+          id: docSnapshot.id,
+          name: data.name,
+          logo: data.logoUrl,
+          description: data.description,
+          launchDate: data.scheduledLaunchDate.toDate().toISOString(),
+          website: data.url,
+          category: data.category || 'New Launch',
+          listingType: data.listingType || 'regular',
+          doFollowBacklink: true,
+          upvotes: data.upvotes || 0,
+          upvotedBy: data.upvotedBy || []
+        });
+      }
     });
 
     // Cache the results
-    const allLaunches = approvedLaunches;
     cache.launches = {
-      data: allLaunches,
+      data: approvedLaunches,
       timestamp: now
     };
 
-    return allLaunches;
+    return approvedLaunches;
   } catch (error) {
     console.error('Error fetching launches:', error);
     // Return cached data if available, otherwise return empty array
