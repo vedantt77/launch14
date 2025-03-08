@@ -92,13 +92,11 @@ function AppContent() {
               </PageTransition>
             } />
             <Route path="/boost" element={
-              <PrivateRoute>
-                <PageTransition>
-                  <Suspense fallback={<LoadingFallback />}>
-                    <BoostPage />
-                  </Suspense>
-                </PageTransition>
-              </PrivateRoute>
+              <PageTransition>
+                <Suspense fallback={<LoadingFallback />}>
+                  <BoostPage />
+                </Suspense>
+              </PageTransition>
             } />
             <Route path="/launch/:id" element={
               <PageTransition>
