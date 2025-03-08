@@ -17,64 +17,6 @@ const cache = {
   }
 };
 
-// Batch fetch upvotes for multiple launches
-async function batchGetUpvotes(launchIds: string[]): Promise<{ [key: string]: { upvotes: number; upvotedBy: string[] } }> {
-  const now = Date.now();
-  const result: { [key: string]: { upvotes: number; upvotedBy: string[] } } = {};
-  const idsToFetch: string[] = [];
-
-  // First check cache
-  launchIds.forEach(id => {
-    const cached = cache.upvotes[id];
-    if (cached && (now - cached.timestamp) < CACHE_DURATION) {
-      result[id] = {
-        upvotes: cached.upvotes,
-        upvotedBy: cached.upvotedBy
-      };
-    } else {
-      idsToFetch.push(id);
-    }
-  });
-
-  if (idsToFetch.length === 0) {
-    return result;
-  }
-
-  // Batch get documents that aren't cached
-  const launchesRef = collection(db, 'launches');
-  const q = query(launchesRef, where('__name__', 'in', idsToFetch));
-  const querySnapshot = await getDocs(q);
-
-  querySnapshot.forEach(doc => {
-    const data = doc.data();
-    result[doc.id] = {
-      upvotes: data.upvotes || 0,
-      upvotedBy: data.upvotedBy || []
-    };
-    
-    // Update cache
-    cache.upvotes[doc.id] = {
-      upvotes: data.upvotes || 0,
-      upvotedBy: data.upvotedBy || [],
-      timestamp: now
-    };
-  });
-
-  // For any IDs that weren't found in the database, set default values
-  idsToFetch.forEach(id => {
-    if (!result[id]) {
-      result[id] = { upvotes: 0, upvotedBy: [] };
-      cache.upvotes[id] = {
-        upvotes: 0,
-        upvotedBy: [],
-        timestamp: now
-      };
-    }
-  });
-
-  return result;
-}
-
 // Function to get all launches with caching
 export async function getLaunches(): Promise<Launch[]> {
   const now = Date.now();
@@ -91,15 +33,10 @@ export async function getLaunches(): Promise<Launch[]> {
     const querySnapshot = await getDocs(q);
     
     const approvedLaunches: Launch[] = [];
-    const launchIds: string[] = querySnapshot.docs.map(doc => doc.id);
-    
-    // Batch fetch upvotes for all launches
-    const upvotesData = await batchGetUpvotes(launchIds);
     
     querySnapshot.docs.forEach(docSnapshot => {
       const data = docSnapshot.data();
-      const upvoteInfo = upvotesData[docSnapshot.id];
-
+      
       approvedLaunches.push({
         id: docSnapshot.id,
         name: data.name,
@@ -110,8 +47,8 @@ export async function getLaunches(): Promise<Launch[]> {
         category: data.category || 'New Launch',
         listingType: data.listingType || 'regular',
         doFollowBacklink: true,
-        upvotes: upvoteInfo.upvotes,
-        upvotedBy: upvoteInfo.upvotedBy
+        upvotes: data.upvotes || 0,
+        upvotedBy: data.upvotedBy || []
       });
     });
 
