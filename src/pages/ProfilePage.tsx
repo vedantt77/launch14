@@ -134,9 +134,9 @@ export function ProfilePage() {
           const profileData = userDoc.data() as UserProfile;
           setUserProfile(profileData);
           
-          setValue('displayName', profileData.displayName);
-          setValue('username', profileData.username);
-          setValue('email', profileData.email);
+          setValue('displayName', profileData.displayName || '');
+          setValue('username', profileData.username || '');
+          setValue('email', profileData.email || '');
           setValue('bio', profileData.bio || '');
         }
       } catch (error) {
@@ -157,24 +157,6 @@ export function ProfilePage() {
   const handleProfileUpdate = async (formData: ProfileFormData) => {
     if (!user || !userProfile) return;
 
-    if (!formData.displayName || !formData.username) {
-      toast({
-        title: 'Error',
-        description: 'Display name and username are required',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!usernameStatus.isValid) {
-      toast({
-        title: 'Error',
-        description: usernameStatus.message,
-        variant: 'destructive',
-      });
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
@@ -193,7 +175,9 @@ export function ProfilePage() {
         avatarUrl = await getDownloadURL(avatarRef);
       }
 
-      if (formData.username.toLowerCase() !== userProfile.username.toLowerCase()) {
+      // Only update username document if username has changed
+      if (formData.username?.toLowerCase() !== userProfile.username?.toLowerCase()) {
+        // Remove old username document if it exists
         if (userProfile.username) {
           await setDoc(doc(db, 'usernames', userProfile.username.toLowerCase()), {
             uid: null,
@@ -201,15 +185,18 @@ export function ProfilePage() {
           });
         }
 
-        await setDoc(doc(db, 'usernames', formData.username.toLowerCase()), {
-          uid: user.uid,
-          username: formData.username.toLowerCase()
-        });
+        // Create new username document if username is provided
+        if (formData.username) {
+          await setDoc(doc(db, 'usernames', formData.username.toLowerCase()), {
+            uid: user.uid,
+            username: formData.username.toLowerCase()
+          });
+        }
       }
 
       const updatedProfile = {
-        displayName: formData.displayName,
-        username: formData.username.toLowerCase(),
+        displayName: formData.displayName || userProfile.displayName,
+        username: formData.username?.toLowerCase() || userProfile.username,
         bio: formData.bio || '',
         avatarUrl,
         email: user.email,
@@ -317,38 +304,31 @@ export function ProfilePage() {
                 {isEditingProfile ? (
                   <form onSubmit={handleSubmitProfile(handleProfileUpdate)} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="displayName">Display Name *</Label>
+                      <Label htmlFor="displayName">Display Name</Label>
                       <Input
                         id="displayName"
-                        {...registerProfile('displayName', { required: 'Display name is required' })}
+                        {...registerProfile('displayName')}
                       />
-                      {profileErrors.displayName && (
-                        <p className="text-sm text-destructive">{profileErrors.displayName.message}</p>
-                      )}
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="username">Username *</Label>
+                      <Label htmlFor="username">Username</Label>
                       <Input
                         id="username"
-                        {...registerProfile('username', {
-                          required: 'Username is required',
-                          pattern: {
-                            value: /^[a-zA-Z0-9_]{3,20}$/,
-                            message: 'Username must be 3-20 characters and can only contain letters, numbers, and underscores'
-                          }
-                        })}
+                        {...registerProfile('username')}
                         className={
                           usernameStatus.isChecking 
                             ? 'opacity-50' 
                             : usernameStatus.isValid 
                               ? 'border-green-500' 
-                              : 'border-red-500'
+                              : username 
+                                ? 'border-red-500'
+                                : ''
                         }
                       />
                       {usernameStatus.isChecking ? (
                         <p className="text-sm text-muted-foreground">Checking availability...</p>
-                      ) : (
+                      ) : username && (
                         <p className={`text-sm ${usernameStatus.isValid ? 'text-green-500' : 'text-red-500'}`}>
                           {usernameStatus.message}
                         </p>
@@ -380,7 +360,7 @@ export function ProfilePage() {
                     <div className="flex justify-end gap-4">
                       <Button
                         type="submit"
-                        disabled={isSubmitting || !usernameStatus.isValid || usernameStatus.isChecking}
+                        disabled={isSubmitting || (username && !usernameStatus.isValid) || usernameStatus.isChecking}
                       >
                         {isSubmitting ? 'Saving...' : 'Save Changes'}
                       </Button>
@@ -415,7 +395,7 @@ export function ProfilePage() {
                   <div className="text-center py-8">
                     <p className="text-muted-foreground mb-4">You haven't submitted any startups yet</p>
                     <Button asChild>
-                      <a href="https://tally.so/r/w5pePN" target="_blank" rel="noopener noreferrer">
+                      <a href="/submit">
                         Submit Your First Startup
                       </a>
                     </Button>
