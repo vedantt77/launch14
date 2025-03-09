@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, where, getDocs, doc, updateDoc, Timestamp, getCountFromServer } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, Timestamp, getCountFromServer, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthContext } from '@/providers/AuthProvider';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,9 +11,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { SubmittedStartup } from '@/lib/types';
-import { Users, FileText, ThumbsUp } from 'lucide-react';
+import { Users, FileText, ThumbsUp, SortAsc, SortDesc } from 'lucide-react';
 
 interface DashboardStats {
   totalUsers: number;
@@ -22,6 +23,7 @@ interface DashboardStats {
 }
 
 type ListingType = 'regular' | 'boosted' | 'premium';
+type SortOrder = 'asc' | 'desc';
 
 export function AdminDashboard() {
   const { user } = useAuthContext();
@@ -39,6 +41,7 @@ export function AdminDashboard() {
   const [approvedStartups, setApprovedStartups] = useState<SubmittedStartup[]>([]);
   const [rejectedStartups, setRejectedStartups] = useState<SubmittedStartup[]>([]);
   const [isLoadingStartups, setIsLoadingStartups] = useState(true);
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [stats, setStats] = useState<DashboardStats>({
     totalUsers: 0,
     totalSubmissions: 0,
@@ -115,8 +118,12 @@ export function AdminDashboard() {
       })) as SubmittedStartup[];
       setPendingStartups(pendingData);
 
-      // Fetch approved startups
-      const approvedQuery = query(startupsRef, where('status', '==', 'approved'));
+      // Fetch approved startups with sorting
+      const approvedQuery = query(
+        startupsRef, 
+        where('status', '==', 'approved'),
+        orderBy('createdAt', sortOrder)
+      );
       const approvedSnapshot = await getDocs(approvedQuery);
       const approvedData = approvedSnapshot.docs.map(doc => ({
         id: doc.id,
@@ -153,7 +160,11 @@ export function AdminDashboard() {
       fetchStartups();
       fetchStats();
     }
-  }, [isAdmin]);
+  }, [isAdmin, sortOrder]);
+
+  const handleSortChange = (value: SortOrder) => {
+    setSortOrder(value);
+  };
 
   const calculateNextLaunchDate = () => {
     const now = new Date();
@@ -432,6 +443,27 @@ export function AdminDashboard() {
             </TabsContent>
 
             <TabsContent value="approved">
+              <div className="mb-4 flex justify-end">
+                <Select value={sortOrder} onValueChange={handleSortChange}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Sort by date" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="desc">
+                      <div className="flex items-center">
+                        <SortDesc className="w-4 h-4 mr-2" />
+                        Newest first
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="asc">
+                      <div className="flex items-center">
+                        <SortAsc className="w-4 h-4 mr-2" />
+                        Oldest first
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               {isLoadingStartups ? (
                 <div className="text-center py-8">
                   <div className="animate-pulse text-primary">Loading approved submissions...</div>
