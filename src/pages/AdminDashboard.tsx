@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, where, getDocs, doc, updateDoc, Timestamp, getCountFromServer } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, Timestamp, getCountFromServer, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthContext } from '@/providers/AuthProvider';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -14,6 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { SubmittedStartup } from '@/lib/types';
 import { Users, FileText, ThumbsUp } from 'lucide-react';
+import { StartupCard } from '@/components/admin/StartupCard';
 
 interface DashboardStats {
   totalUsers: number;
@@ -76,15 +76,12 @@ export function AdminDashboard() {
 
   const fetchStats = async () => {
     try {
-      // Get total users
       const usersSnapshot = await getCountFromServer(collection(db, 'users'));
       const totalUsers = usersSnapshot.data().count;
 
-      // Get total submissions
       const startupsSnapshot = await getCountFromServer(collection(db, 'startups'));
       const totalSubmissions = startupsSnapshot.data().count;
 
-      // Get total upvotes
       const launchesRef = collection(db, 'launches');
       const launchesSnapshot = await getDocs(launchesRef);
       const totalUpvotes = launchesSnapshot.docs.reduce((sum, doc) => sum + (doc.data().upvotes || 0), 0);
@@ -104,7 +101,6 @@ export function AdminDashboard() {
     try {
       const startupsRef = collection(db, 'startups');
       
-      // Fetch pending startups
       const pendingQuery = query(startupsRef, where('status', '==', 'pending'));
       const pendingSnapshot = await getDocs(pendingQuery);
       const pendingData = pendingSnapshot.docs.map(doc => ({
@@ -115,8 +111,11 @@ export function AdminDashboard() {
       })) as SubmittedStartup[];
       setPendingStartups(pendingData);
 
-      // Fetch approved startups
-      const approvedQuery = query(startupsRef, where('status', '==', 'approved'));
+      const approvedQuery = query(
+        startupsRef, 
+        where('status', '==', 'approved'),
+        orderBy('scheduledLaunchDate', 'desc')
+      );
       const approvedSnapshot = await getDocs(approvedQuery);
       const approvedData = approvedSnapshot.docs.map(doc => ({
         id: doc.id,
@@ -126,7 +125,6 @@ export function AdminDashboard() {
       })) as SubmittedStartup[];
       setApprovedStartups(approvedData);
 
-      // Fetch rejected startups
       const rejectedQuery = query(startupsRef, where('status', '==', 'rejected'));
       const rejectedSnapshot = await getDocs(rejectedQuery);
       const rejectedData = rejectedSnapshot.docs.map(doc => ({
@@ -190,11 +188,10 @@ export function AdminDashboard() {
         updatedAt: Timestamp.now()
       });
 
-      // Refresh the startups lists and stats
       await Promise.all([fetchStartups(), fetchStats()]);
 
       toast({
-        title: 'Success',
+        title: 'Success!',
         description: `Startup approved as ${selectedListingType} listing${
           selectedListingType === 'regular' && !isImmediateLaunch 
             ? ' and scheduled for next week' 
@@ -225,7 +222,6 @@ export function AdminDashboard() {
         updatedAt: Timestamp.now()
       });
 
-      // Refresh the startups lists and stats
       await Promise.all([fetchStartups(), fetchStats()]);
 
       toast({
@@ -250,114 +246,12 @@ export function AdminDashboard() {
     );
   }
 
-  const StartupCard = ({ startup }: { startup: SubmittedStartup }) => (
-    <Card className="mb-4">
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-4">
-            <img 
-              src={startup.logoUrl} 
-              alt={startup.name} 
-              className="w-12 h-12 rounded-lg object-cover"
-            />
-            <div>
-              <CardTitle className="text-xl">{startup.name}</CardTitle>
-              <CardDescription>
-                Submitted on {startup.submittedAt.toLocaleDateString()}
-              </CardDescription>
-            </div>
-          </div>
-          <Badge 
-            variant={
-              startup.status === 'approved' ? 'success' :
-              startup.status === 'rejected' ? 'destructive' :
-              'secondary'
-            }
-          >
-            {startup.status}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <p className="text-muted-foreground">{startup.description}</p>
-        <div className="flex flex-col gap-1">
-          <a 
-            href={startup.url}
-            target="_blank"
-            rel="noopener noreferrer" 
-            className="text-primary hover:underline"
-          >
-            {startup.url}
-          </a>
-          <p className="text-sm text-muted-foreground">
-            Social: {startup.socialHandle}
-          </p>
-          {startup.scheduledLaunchDate && (
-            <p className="text-sm text-primary">
-              {startup.scheduledLaunchDate > new Date() 
-                ? `Scheduled for launch on: ${startup.scheduledLaunchDate.toLocaleDateString()}`
-                : `Launched on: ${startup.scheduledLaunchDate.toLocaleDateString()}`
-              }
-            </p>
-          )}
-          {startup.status === 'approved' && (
-            <div className="flex items-center space-x-2 mt-2">
-              <Badge variant={startup.doFollowBacklink ? "success" : "secondary"}>
-                {startup.doFollowBacklink ? "doFollow" : "noFollow"} backlink
-              </Badge>
-              {startup.listingType && (
-                <Badge variant="outline">
-                  {startup.listingType} listing
-                </Badge>
-              )}
-            </div>
-          )}
-        </div>
-      </CardContent>
-      {startup.status === 'pending' && (
-        <CardFooter className="flex justify-end gap-2">
-          <Button
-            variant="outline"
-            onClick={() => handleReject(startup.id)}
-          >
-            Reject
-          </Button>
-          <Button
-            onClick={() => handleApproveClick(startup.id)}
-          >
-            Approve
-          </Button>
-        </CardFooter>
-      )}
-      {startup.status === 'rejected' && (
-        <CardFooter className="flex justify-end">
-          <Button
-            onClick={() => handleReapproveClick(startup.id)}
-          >
-            Re-approve
-          </Button>
-        </CardFooter>
-      )}
-      {startup.status === 'approved' && (
-        <CardFooter className="flex justify-end">
-          <Button
-            variant="destructive"
-            onClick={() => handleReject(startup.id)}
-          >
-            Reject
-          </Button>
-        </CardFooter>
-      )}
-    </Card>
-  );
-
   return (
     <>
       <div className="min-h-screen bg-background py-12 px-4">
         <div className="container max-w-4xl mx-auto">
           <h1 className="text-3xl font-bold mb-8">Admin Dashboard</h1>
 
-          {/* Stats Widgets */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <Card>
               <CardContent className="pt-6">
@@ -426,7 +320,13 @@ export function AdminDashboard() {
                 </p>
               ) : (
                 pendingStartups.map(startup => (
-                  <StartupCard key={startup.id} startup={startup} />
+                  <StartupCard 
+                    key={startup.id} 
+                    startup={startup}
+                    onApprove={handleApproveClick}
+                    onReapprove={handleReapproveClick}
+                    onReject={handleReject}
+                  />
                 ))
               )}
             </TabsContent>
@@ -442,7 +342,13 @@ export function AdminDashboard() {
                 </p>
               ) : (
                 approvedStartups.map(startup => (
-                  <StartupCard key={startup.id} startup={startup} />
+                  <StartupCard 
+                    key={startup.id} 
+                    startup={startup}
+                    onApprove={handleApproveClick}
+                    onReapprove={handleReapproveClick}
+                    onReject={handleReject}
+                  />
                 ))
               )}
             </TabsContent>
@@ -458,7 +364,13 @@ export function AdminDashboard() {
                 </p>
               ) : (
                 rejectedStartups.map(startup => (
-                  <StartupCard key={startup.id} startup={startup} />
+                  <StartupCard 
+                    key={startup.id} 
+                    startup={startup}
+                    onApprove={handleApproveClick}
+                    onReapprove={handleReapproveClick}
+                    onReject={handleReject}
+                  />
                 ))
               )}
             </TabsContent>
