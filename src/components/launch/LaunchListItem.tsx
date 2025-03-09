@@ -8,8 +8,7 @@ import { shareUrl } from '@/lib/utils/share';
 import { memo, useState } from 'react';
 import { useAuthContext } from '@/providers/AuthProvider';
 import { useNavigate } from 'react-router-dom';
-import { doc, updateDoc, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { toggleUpvote } from '@/lib/data/launches';
 import { useToast } from '@/hooks/use-toast';
 
 interface LaunchListItemProps {
@@ -65,36 +64,12 @@ export const LaunchListItem = memo(function LaunchListItem({ launch }: LaunchLis
 
     try {
       setIsUpvoting(true);
-      const startupRef = doc(db, 'startups', launch.id);
-      const startupDoc = await getDoc(startupRef);
-
-      if (!startupDoc.exists()) {
-        toast({
-          title: "Error",
-          description: "Startup not found",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const currentUpvotedBy = startupDoc.data().upvotedBy || [];
-      const isAlreadyUpvoted = currentUpvotedBy.includes(user.uid);
-      const currentUpvotes = startupDoc.data().upvotes || 0;
-
-      if (isAlreadyUpvoted) {
-        // Remove upvote
-        await updateDoc(startupRef, {
-          upvotes: currentUpvotes - 1,
-          upvotedBy: arrayRemove(user.uid)
-        });
+      await toggleUpvote(launch.id, user.uid);
+      
+      if (hasUpvoted) {
         setUpvotes(prev => prev - 1);
         setHasUpvoted(false);
       } else {
-        // Add upvote
-        await updateDoc(startupRef, {
-          upvotes: currentUpvotes + 1,
-          upvotedBy: arrayUnion(user.uid)
-        });
         setUpvotes(prev => prev + 1);
         setHasUpvoted(true);
       }
