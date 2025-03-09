@@ -8,7 +8,7 @@ import { shareUrl } from '@/lib/utils/share';
 import { memo, useState } from 'react';
 import { useAuthContext } from '@/providers/AuthProvider';
 import { useNavigate } from 'react-router-dom';
-import { doc, updateDoc, arrayUnion, arrayRemove, getDoc, setDoc } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 
@@ -65,38 +65,38 @@ export const LaunchListItem = memo(function LaunchListItem({ launch }: LaunchLis
 
     try {
       setIsUpvoting(true);
-      const launchRef = doc(db, 'launches', launch.id);
-      const launchDoc = await getDoc(launchRef);
+      const startupRef = doc(db, 'startups', launch.id);
+      const startupDoc = await getDoc(startupRef);
 
-      if (!launchDoc.exists()) {
-        // Create the document if it doesn't exist
-        await setDoc(launchRef, {
-          upvotes: 1,
-          upvotedBy: [user.uid]
+      if (!startupDoc.exists()) {
+        toast({
+          title: "Error",
+          description: "Startup not found",
+          variant: "destructive",
         });
-        setUpvotes(1);
-        setHasUpvoted(true);
-      } else {
-        const currentUpvotedBy = launchDoc.data().upvotedBy || [];
-        const isAlreadyUpvoted = currentUpvotedBy.includes(user.uid);
+        return;
+      }
 
-        if (isAlreadyUpvoted) {
-          // Remove upvote
-          await updateDoc(launchRef, {
-            upvotes: (launchDoc.data().upvotes || 1) - 1,
-            upvotedBy: arrayRemove(user.uid)
-          });
-          setUpvotes(prev => prev - 1);
-          setHasUpvoted(false);
-        } else {
-          // Add upvote
-          await updateDoc(launchRef, {
-            upvotes: (launchDoc.data().upvotes || 0) + 1,
-            upvotedBy: arrayUnion(user.uid)
-          });
-          setUpvotes(prev => prev + 1);
-          setHasUpvoted(true);
-        }
+      const currentUpvotedBy = startupDoc.data().upvotedBy || [];
+      const isAlreadyUpvoted = currentUpvotedBy.includes(user.uid);
+      const currentUpvotes = startupDoc.data().upvotes || 0;
+
+      if (isAlreadyUpvoted) {
+        // Remove upvote
+        await updateDoc(startupRef, {
+          upvotes: currentUpvotes - 1,
+          upvotedBy: arrayRemove(user.uid)
+        });
+        setUpvotes(prev => prev - 1);
+        setHasUpvoted(false);
+      } else {
+        // Add upvote
+        await updateDoc(startupRef, {
+          upvotes: currentUpvotes + 1,
+          upvotedBy: arrayUnion(user.uid)
+        });
+        setUpvotes(prev => prev + 1);
+        setHasUpvoted(true);
       }
     } catch (error) {
       console.error('Error updating upvote:', error);
