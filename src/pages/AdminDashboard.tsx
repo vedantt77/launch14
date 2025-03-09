@@ -158,7 +158,7 @@ export function AdminDashboard() {
       console.error('Error fetching startups:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch startups",
+        description: "Failed to fetch startups. Please ensure you have admin privileges.",
         variant: "destructive",
       });
     } finally {
