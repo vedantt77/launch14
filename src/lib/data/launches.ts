@@ -1,4 +1,4 @@
-import { collection, query, where, getDocs, doc, getDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, Timestamp, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Launch } from '../types/launch';
 
@@ -63,7 +63,7 @@ export async function getLaunches(): Promise<Launch[]> {
           website: data.url,
           category: data.category || 'New Launch',
           listingType: data.listingType || 'regular',
-          doFollowBacklink: true,
+          doFollowBacklink: data.doFollowBacklink || false,
           upvotes: data.upvotes || 0,
           upvotedBy: data.upvotedBy || []
         });
@@ -81,6 +81,42 @@ export async function getLaunches(): Promise<Launch[]> {
     console.error('Error fetching launches:', error);
     // Return cached data if available, otherwise return empty array
     return cache.launches?.data || [];
+  }
+}
+
+// Function to handle upvoting
+export async function toggleUpvote(launchId: string, userId: string): Promise<void> {
+  try {
+    const startupRef = doc(db, 'startups', launchId);
+    const startupDoc = await getDoc(startupRef);
+
+    if (!startupDoc.exists()) {
+      throw new Error('Launch not found');
+    }
+
+    const data = startupDoc.data();
+    const upvotedBy = data.upvotedBy || [];
+    const currentUpvotes = data.upvotes || 0;
+
+    if (upvotedBy.includes(userId)) {
+      // Remove upvote
+      await updateDoc(startupRef, {
+        upvotes: currentUpvotes - 1,
+        upvotedBy: arrayRemove(userId)
+      });
+    } else {
+      // Add upvote
+      await updateDoc(startupRef, {
+        upvotes: currentUpvotes + 1,
+        upvotedBy: arrayUnion(userId)
+      });
+    }
+
+    // Clear cache to ensure fresh data on next fetch
+    clearLaunchesCache();
+  } catch (error) {
+    console.error('Error toggling upvote:', error);
+    throw error;
   }
 }
 
