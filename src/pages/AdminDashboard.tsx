@@ -30,9 +30,9 @@ export function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false);
+  const [isReapproveDialogOpen, setIsReapproveDialogOpen] = useState(false);
   const [selectedStartupId, setSelectedStartupId] = useState<string | null>(null);
   const [selectedListingType, setSelectedListingType] = useState<ListingType>('regular');
-  const [isReapproveDialogOpen, setIsReapproveDialogOpen] = useState(false);
   const [doFollowBacklink, setDoFollowBacklink] = useState(true);
   const [isImmediateLaunch, setIsImmediateLaunch] = useState(false);
   const [pendingStartups, setPendingStartups] = useState<SubmittedStartup[]>([]);
@@ -82,9 +82,11 @@ export function AdminDashboard() {
       const startupsSnapshot = await getCountFromServer(collection(db, 'startups'));
       const totalSubmissions = startupsSnapshot.data().count;
 
-      const launchesRef = collection(db, 'launches');
-      const launchesSnapshot = await getDocs(launchesRef);
-      const totalUpvotes = launchesSnapshot.docs.reduce((sum, doc) => sum + (doc.data().upvotes || 0), 0);
+      // Calculate total upvotes from startups collection
+      const startupsRef = collection(db, 'startups');
+      const startupsQuery = query(startupsRef);
+      const startupsQuerySnapshot = await getDocs(startupsQuery);
+      const totalUpvotes = startupsQuerySnapshot.docs.reduce((sum, doc) => sum + (doc.data().upvotes || 0), 0);
 
       setStats({
         totalUsers,
@@ -93,15 +95,27 @@ export function AdminDashboard() {
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch dashboard statistics",
+        variant: "destructive",
+      });
     }
   };
 
   const fetchStartups = async () => {
+    if (!isAdmin) return;
+    
     setIsLoadingStartups(true);
     try {
       const startupsRef = collection(db, 'startups');
       
-      const pendingQuery = query(startupsRef, where('status', '==', 'pending'));
+      // Fetch pending startups
+      const pendingQuery = query(
+        startupsRef, 
+        where('status', '==', 'pending'),
+        orderBy('createdAt', 'desc')
+      );
       const pendingSnapshot = await getDocs(pendingQuery);
       const pendingData = pendingSnapshot.docs.map(doc => ({
         id: doc.id,
@@ -111,6 +125,7 @@ export function AdminDashboard() {
       })) as SubmittedStartup[];
       setPendingStartups(pendingData);
 
+      // Fetch approved startups
       const approvedQuery = query(
         startupsRef, 
         where('status', '==', 'approved'),
@@ -125,7 +140,12 @@ export function AdminDashboard() {
       })) as SubmittedStartup[];
       setApprovedStartups(approvedData);
 
-      const rejectedQuery = query(startupsRef, where('status', '==', 'rejected'));
+      // Fetch rejected startups
+      const rejectedQuery = query(
+        startupsRef, 
+        where('status', '==', 'rejected'),
+        orderBy('createdAt', 'desc')
+      );
       const rejectedSnapshot = await getDocs(rejectedQuery);
       const rejectedData = rejectedSnapshot.docs.map(doc => ({
         id: doc.id,
@@ -137,9 +157,9 @@ export function AdminDashboard() {
     } catch (error) {
       console.error('Error fetching startups:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to fetch startups',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to fetch startups",
+        variant: "destructive",
       });
     } finally {
       setIsLoadingStartups(false);
@@ -191,7 +211,7 @@ export function AdminDashboard() {
       await Promise.all([fetchStartups(), fetchStats()]);
 
       toast({
-        title: 'Success!',
+        title: "Success!",
         description: `Startup approved as ${selectedListingType} listing${
           selectedListingType === 'regular' && !isImmediateLaunch 
             ? ' and scheduled for next week' 
@@ -207,9 +227,9 @@ export function AdminDashboard() {
     } catch (error) {
       console.error('Error updating startup status:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to approve startup',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to approve startup",
+        variant: "destructive",
       });
     }
   };
@@ -225,15 +245,15 @@ export function AdminDashboard() {
       await Promise.all([fetchStartups(), fetchStats()]);
 
       toast({
-        title: 'Success',
-        description: 'Startup rejected successfully',
+        title: "Success",
+        description: "Startup rejected successfully",
       });
     } catch (error) {
       console.error('Error updating startup status:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to reject startup',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to reject startup",
+        variant: "destructive",
       });
     }
   };
